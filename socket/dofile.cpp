@@ -5,8 +5,8 @@
 	Use socket to download file from internet
 	HTTP protocol only
 	
-	OS: Windows (C-Free 5)
-	Command to compile: gcc dofile.cpp -o dofile -lws2_32 -lstdc++
+	OS: Windows (with C-Free 5)
+	Command to compile: gcc dpro.cpp -o dpro -lws2_32 -lstdc++
 */
 
 #define _WIN32_WINNT 0x0501
@@ -20,6 +20,7 @@ using namespace std;
 
 #define SIZE 10240
 
+void help(char *text);
 bool conn2host();
 void closeconn();
 void link2host();
@@ -34,22 +35,23 @@ string PATHFILE, HOST, URL;
 int main(int argc, char *argv[])
 {
 	if(argc !=2 ){
-		std::cout<<"Usage: "<<argv[0]<<" <url>"<<std::endl;
+		help(argv[0]);
 		exit(1);
 	}
 	
 	URL = argv[1];
 	link2host();
 	link2path();
-	if(PATHFILE == ""){
-		std::cout<<"Path file is null"<<std::endl;
+	if(PATHFILE == "" || PATHFILE == "/"){
+		std::cerr<<"Path file is null"<<std::endl;
+		help(argv[0]);
 		exit(1);
 	}
 	
  	// connect to host
 	if(conn2host()){ 
 		// success
-		std::cout<<"Connect successful"<<std::endl;
+		std::cout<<"Connect successful"<<std::endl<<std::endl;
 		
 		if(download_file()){
 			
@@ -73,12 +75,12 @@ bool conn2host(){
 
 	if (error){
 		// what happen!
-		std::cout<<"ERROR "<<WSAGetLastError()<<": Call WSAStartup()"<<std::endl;
+		std::cerr<<"ERROR "<<WSAGetLastError()<<": Call WSAStartup()"<<std::endl;
 		return false;	
 	}
 	// check winsoc version 2
 	if (w.wVersion != 0x0202) {
-		std::cout<<"ERROR "<<WSAGetLastError()<<": winsock version"<<std::endl;
+		std::cerr<<"ERROR "<<WSAGetLastError()<<": winsock version"<<std::endl;
 		WSACleanup();
 		return false;
 	}
@@ -87,12 +89,12 @@ bool conn2host(){
 	struct hostent *lh;
 	lh = gethostbyname(HOST.c_str());
 	if(lh == NULL){
-		std::cout<<"ERROR "<<WSAGetLastError()<<": No such host name: "<<HOST<<std::endl;
+		std::cerr<<"ERROR "<<WSAGetLastError()<<": No such host name: "<<HOST<<std::endl;
 		closeconn();
 		exit(1);
 	}
 	else if (lh->h_length != sizeof(in_addr)){
- 		std::cout<<"ERROR "<<WSAGetLastError()<<": gethostbyname did not return IPv4 addresses" <<std::endl;
+ 		std::cerr<<"ERROR "<<WSAGetLastError()<<": gethostbyname did not return IPv4 addresses" <<std::endl;
  		closeconn();
 		exit(1);
  	}
@@ -109,13 +111,13 @@ bool conn2host(){
 	
 	if (soc == INVALID_SOCKET){
 		// cannot create socket
-		std::cout<<"ERROR "<<WSAGetLastError()<<": invalib socket"<<std::endl;
+		std::cerr<<"ERROR "<<WSAGetLastError()<<": invalib socket"<<std::endl;
 		return false;
 	}
 
 	if (connect(soc, (SOCKADDR *)&ser, sizeof(ser)) == SOCKET_ERROR){
 		// cannot connect
-		std::cout<<"ERROR "<<WSAGetLastError()<<": Connect socket"<<std::endl;
+		std::cerr<<"ERROR "<<WSAGetLastError()<<": Connect socket"<<std::endl;
 		return false;	
 	}
 	// success
@@ -128,20 +130,24 @@ bool download_file(){
 	
 	if(send(soc ,message.c_str(), message.length(), 0) < 0)
     {	// GET pathfile
-        std::cout<<"ERROR "<<WSAGetLastError()<<": GET failed"<<std::endl;
+        std::cerr<<"ERROR "<<WSAGetLastError()<<": GET failed"<<std::endl;
         return false;
     }
     
     char data[SIZE];
     int total_len = 0;
     ofstream myfile;
+    
+    // open file 
     myfile.open(get_filename(PATHFILE).c_str(), ios::binary);
     if(!myfile.is_open()){
-    	std::cout<<WSAGetLastError()<<": Unable open "<<get_filename(PATHFILE)<<std::endl;
+    	// Unable open
+    	std::cerr<<"FILE ERROR "<<WSAGetLastError()<<": Unable open "<<get_filename(PATHFILE)<<std::endl;
+    	std::cerr<<"Please check your url!"<<std::endl;
     	return false;	
     }
     
-    bool isHeader = true;
+    bool isHeader = true; //  flag: receive data content header
 	while(true){
     	int recv_len = recv(soc, data, sizeof(data), 0);
     	if(recv_len == 0){
@@ -149,8 +155,39 @@ bool download_file(){
 	    	break;
 	    }
 	    if(isHeader){
-	    	// if data content header HTTP 
-	    	// remove it
+	    	/* check header
+	    		404 Not found
+	    		403 Forbidden
+	    		200 OK
+	    	*/
+	    	char *ok = "200 OK";
+	    	if(strstr(data, ok) == NULL){ // what happen??
+	    		char *notfound = "404 Not found";
+	    		char *forbidden = "403 Forbidden";
+	    		if(strstr(data, notfound) != NULL){
+	    			// Not Found
+    		 		std::cerr<<"404 Not found HTTP"<<std::endl;
+        			return false;
+		    	}
+		    	else if(strstr(data, forbidden) != NULL){
+		    		// Forbidden
+	    			std::cerr<<"403 Forbidden HTTP"<<std::endl;
+        			return false;
+	    		}
+	    		else{
+	    			// what error???
+	    			// print header to console
+		    		for(int i = 0; i < recv_len; i++){
+		    			std::cout<<data[i];
+				    	if(data[i] == 0x0d && data[i+1] == 0x0a && data[i+2] == 0x0d && data[i+3] == 0x0a){
+			    			break;
+			    		}
+		    		}
+        			return false;
+		    	}
+	    	}
+	    	// OK
+	    	// remove header HTTP
 	    	int indexdata = 0;
     		for(int i = 0; i < recv_len; i++){
 		    	if(data[i] == 0x0d && data[i+1] == 0x0a && data[i+2] == 0x0d && data[i+3] == 0x0a){
@@ -158,12 +195,14 @@ bool download_file(){
 	    			break;
 	    		}
 		    }
+		    // copy data to new char array
 		    char newdata[recv_len - indexdata];
 		    int index = 0;
 		    for(int i = indexdata; i < recv_len; i++){
     			newdata[index] = data[i];
     			index++;
     		}
+    		// write data to file
 		    myfile.write(newdata, recv_len);	
 		    isHeader = false;
     	}
@@ -200,12 +239,12 @@ void link2host(){
 	}
 	else if(URL.find("https://") == 0){
 		// HTTPS
-		std::cout<<"Don't support HTTPS "<<std::endl;
+		std::cerr<<"Don't support HTTPS "<<std::endl;
 		closeconn();
 		exit(1);
 	}
 	else {
-		// HTTP
+		// default is HTTP
 		PORT = 80;
 		HOST = URL.substr(0, URL.find("/"));
 	}
@@ -214,4 +253,10 @@ void link2host(){
 // get pathfile from url
 void link2path(){
 	PATHFILE = URL.substr(URL.find(HOST)+HOST.length());
+}
+
+void help(char *text){
+	std::cout<<std::endl<<"Usage: "<<text<<" <url>"<<std::endl<<std::endl;
+	std::cout<<"URL:    http://domain.name/path/to/file.txt"<<std::endl;
+	std::cout<<"        domain.name/path/to/file.txt"<<std::endl;
 }
