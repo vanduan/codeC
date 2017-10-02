@@ -8,7 +8,7 @@
 		- Run a process
 	
 	OS: Windows (with C-Free 5)
-	
+	Command to compile: gcc dpro.cpp -o dpro -lws2_32 -lstdc++
 */
 	
 #include <unistd.h>
@@ -60,7 +60,7 @@ void run(char *name){
 			        name,      	// Command line
 			        NULL,       // Process handle not inheritable
 			        NULL,       // Thread handle not inheritable 
-			        FALSE,       // Set handle inheritance to FALSE
+			        FALSE,      // Set handle inheritance to FALSE
 			        0,          // No creation flags
 			        NULL,       // Use parent's environment block
 			        NULL,       // Use parent's starting directory 
