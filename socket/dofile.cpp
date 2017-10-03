@@ -226,7 +226,15 @@ bool download_file(){
 
 // return filename
 string get_filename(string PATHFILE){
-	return ".\\" + PATHFILE.substr(PATHFILE.find_last_of("/"));
+	char *query = "?";
+	// content string query?
+	// http://domain.name/path/file/filename.txt?query=zzz
+	if(strstr(PATHFILE.c_str(), query) != NULL){
+		PATHFILE = PATHFILE.substr(PATHFILE.find_last_of("/"));
+		return ".\\" + PATHFILE.substr(0, PATHFILE.find("?"));
+	}
+	else
+		return ".\\" + PATHFILE.substr(PATHFILE.find_last_of("/"));
 }
 
 // CLOSECONNECTION - shutdown socket and close connection
