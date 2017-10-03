@@ -6,7 +6,7 @@
 	HTTP protocol only
 	
 	OS: Windows (with C-Free 5)
-	Command to compile: gcc dpro.cpp -o dpro -lws2_32 -lstdc++
+	Command to compile: gcc dofile.cpp -o dofile -lws2_32 -lstdc++
 */
 
 #define _WIN32_WINNT 0x0501
@@ -152,31 +152,38 @@ bool download_file(){
     	int recv_len = recv(soc, data, sizeof(data), 0);
     	if(recv_len == 0){
     		// disconnect
+    		std::cout<<"Done: Save to file "<<get_filename(PATHFILE)<<std::endl;
 	    	break;
 	    }
 	    if(isHeader){
 	    	/* check header
-	    		404 Not found
+	    		404 Not Found
 	    		403 Forbidden
 	    		200 OK
 	    	*/
 	    	char *ok = "200 OK";
 	    	if(strstr(data, ok) == NULL){ // what happen??
-	    		char *notfound = "404 Not found";
+	    		char *notfound = "404 Not Found";
 	    		char *forbidden = "403 Forbidden";
-	    		if(strstr(data, notfound) != NULL){
+	    		
+	    		// colse file and remove
+				myfile.close();
+	    		remove(get_filename(PATHFILE).c_str());
+	    		
+				if(strstr(data, notfound) != NULL){
 	    			// Not Found
-    		 		std::cerr<<"404 Not found HTTP"<<std::endl;
+    		 		std::cerr<<"ERROR: 404 Not Found HTTP"<<std::endl;
         			return false;
 		    	}
 		    	else if(strstr(data, forbidden) != NULL){
 		    		// Forbidden
-	    			std::cerr<<"403 Forbidden HTTP"<<std::endl;
+	    			std::cerr<<"ERROR: 403 Forbidden HTTP"<<std::endl;
         			return false;
 	    		}
 	    		else{
 	    			// what error???
 	    			// print header to console
+	    			std::cerr<<"ERROR: "<<std::endl;
 		    		for(int i = 0; i < recv_len; i++){
 		    			std::cout<<data[i];
 				    	if(data[i] == 0x0d && data[i+1] == 0x0a && data[i+2] == 0x0d && data[i+3] == 0x0a){
