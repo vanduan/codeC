@@ -210,14 +210,14 @@ bool download_file(){
     			index++;
     		}
     		// write data to file
-		    myfile.write(newdata, recv_len);	
+		    myfile.write(newdata, recv_len - indexdata);	
 		    isHeader = false;
     	}
     	else{
 	    	myfile.write(data, recv_len);
 	    }
-	    total_len += recv_len;
-	    std::cout<<"Received "<<total_len<<" bytes"<<std::endl;
+        total_len += recv_len;
+        std::cout<<"Received "<<total_len<<" bytes"<<std::endl;
     }
     myfile.close();
     
