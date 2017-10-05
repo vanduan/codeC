@@ -265,7 +265,7 @@ void link2host(){
 	
 	// port in url
 	// http://domain.name:<port>/path/file/filename.txt?query=zzz
-	if(HOST.find(":") > 0){
+	if(HOST.find(":") != -1){
 		string p = HOST.substr(HOST.find(":") + 1);
 		PORT = atoi(p.c_str());
 		HOST = HOST.substr(0, HOST.find(":"));
