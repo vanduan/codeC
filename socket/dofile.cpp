@@ -1,7 +1,6 @@
 /*
 	Author: vanduan95.dvp@gmail.com
 	Date: 9/2017
-
 	Use socket to download file from internet
 	HTTP protocol only
 	
@@ -18,7 +17,7 @@
 #include <iostream>
 using namespace std;
 
-#define SIZE 10240
+#define SIZE 102400
 
 void help(char *text);
 bool conn2host();
@@ -101,7 +100,7 @@ bool conn2host(){
  	else{
  		// we have server IP
 		ser.sin_addr.s_addr = *(u_long *) lh->h_addr_list[0];
-    	std::cout<<"Server IP"<<": "<<inet_ntoa(ser.sin_addr)<<std::endl;
+    	std::cout<<"Server IP"<<": "<<inet_ntoa(ser.sin_addr)<<" - Port"<<": "<<PORT<<std::endl<<std::endl;
 	 }
 	
 	ser.sin_family = AF_INET; // address family Internet (IPv4)
@@ -263,11 +262,23 @@ void link2host(){
 		PORT = 80;
 		HOST = URL.substr(0, URL.find("/"));
 	}
+	
+	// port in url
+	// http://domain.name:<port>/path/file/filename.txt?query=zzz
+	if(HOST.find(":") > 0){
+		string p = HOST.substr(HOST.find(":") + 1);
+		PORT = atoi(p.c_str());
+		HOST = HOST.substr(0, HOST.find(":"));
+	}
 }
 
 // get pathfile from url
 void link2path(){
 	PATHFILE = URL.substr(URL.find(HOST)+HOST.length());
+	// url content port number
+	if(PATHFILE.find(":") < PATHFILE.find("/"))
+		PATHFILE = PATHFILE.substr(PATHFILE.find("/"));
+		
 }
 
 void help(char *text){
