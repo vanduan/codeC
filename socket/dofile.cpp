@@ -9,15 +9,20 @@
 */
 
 #define _WIN32_WINNT 0x0501
+#define PBSTR "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||"
+#define PBWIDTH 60
 
-#include <winsock.h>
+#include <winsock2.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
 #include <string>
 #include <iterator>
 #include <fstream>
 #include <iostream>
 using namespace std;
 
-#define SIZE 102400
+#define SIZE 1024000
 
 void help(char *text);
 bool conn2host();
@@ -25,11 +30,16 @@ void closeconn();
 void link2host();
 void link2path();
 bool download_file();
+bool download_file_https();
 string get_filename(string PATHFILE);
+void printProgress (double percentage);
 
-SOCKET soc; 
+SOCKET soc;
+SSL *ssl;
+
 int PORT;
 string PATHFILE, HOST, URL;
+string PROTOCOL;
 
 int main(int argc, char *argv[])
 {
@@ -52,11 +62,12 @@ int main(int argc, char *argv[])
 		// success
 		std::cout<<"Connect successful"<<std::endl<<std::endl;
 		
-		if(download_file()){
-			
+		if(PROTOCOL	== "HTTP"){
+			// download with HTTP
+			download_file();
 		}
-		else{
-			
+		else if(PROTOCOL == "HTTPS"){
+			download_file_https();
 		}
 	}
 	
@@ -134,8 +145,9 @@ bool download_file(){
     }
     
     char data[SIZE];
-    int total_len = 0;
+    int total_len = 0, data_len = -1;
     ofstream myfile;
+    bool isHeader = true; //  flag: receive data content header
     
     // open file 
     myfile.open(get_filename(PATHFILE).c_str(), ios::binary);
@@ -146,15 +158,22 @@ bool download_file(){
     	return false;	
     }
     
-    bool isHeader = true; //  flag: receive data content header
+
 	while(true){
-    	int recv_len = recv(soc, data, sizeof(data), 0);
-    	if(recv_len == 0){
+		if(total_len == data_len){
+			// disconnect when received full data
+    		std::cout<<std::endl<<"Done: Save to file "<<get_filename(PATHFILE)<<std::endl;
+    		break;
+		}
+		
+    	int recv_len = recv(soc, data, sizeof(data), 0); // receive data
+    	
+		if(recv_len == 0){
     		// disconnect
-    		std::cout<<"Done: Save to file "<<get_filename(PATHFILE)<<std::endl;
 	    	break;
 	    }
-	    if(isHeader){
+	    
+   	 	if(isHeader){
 	    	/* check header
 	    		404 Not Found
 	    		403 Forbidden
@@ -171,12 +190,12 @@ bool download_file(){
 	    		
 				if(strstr(data, notfound) != NULL){
 	    			// Not Found
-    		 		std::cerr<<"ERROR: 404 Not Found HTTP"<<std::endl;
+    		 		std::cerr<<"ERROR: 404 Not Found"<<std::endl;
         			return false;
 		    	}
 		    	else if(strstr(data, forbidden) != NULL){
 		    		// Forbidden
-	    			std::cerr<<"ERROR: 403 Forbidden HTTP"<<std::endl;
+	    			std::cerr<<"ERROR: 403 Forbidden"<<std::endl;
         			return false;
 	    		}
 	    		else{
@@ -193,7 +212,7 @@ bool download_file(){
 		    	}
 	    	}
 	    	// OK
-	    	// remove header HTTP
+	    	// find index, start data file
 	    	int indexdata = 0;
     		for(int i = 0; i < recv_len; i++){
 		    	if(data[i] == 0x0d && data[i+1] == 0x0a && data[i+2] == 0x0d && data[i+3] == 0x0a){
@@ -201,6 +220,7 @@ bool download_file(){
 	    			break;
 	    		}
 		    }
+		    
 		    // copy data to new char array
 		    char newdata[recv_len - indexdata];
 		    int index = 0;
@@ -208,19 +228,54 @@ bool download_file(){
     			newdata[index] = data[i];
     			index++;
     		}
+    		
+    		// get content-length (data len) from header
+    		char *str = "Length: ";
+    		char *content = strstr(data, str);
+    		char size[32];
+    		for(int i = 0; i < strlen(content); i++){
+		    	if(content[i] == 0x20){
+	    			for(int k = i+1; k < strlen(content); k++){
+			    		if(content[k] == 0x0d){
+		    				int index = 0;
+							for(int h = i+1; h < k; h++){
+								size[index] = content[h];
+								index++;
+							}
+							break;
+		    			}
+	    			}
+	    			break;
+    			}
+    		}
+    		
+		    data_len = atoi(size);
+		    
     		// write data to file
 		    myfile.write(newdata, recv_len - indexdata);	
 		    isHeader = false;
+		    
+		    recv_len = recv_len - indexdata;
     	}
     	else{
 	    	myfile.write(data, recv_len);
 	    }
         total_len += recv_len;
-        std::cout<<"Received "<<total_len<<" bytes"<<std::endl;
+        printProgress((double)total_len/data_len);
     }
     myfile.close();
     
 	return true;
+}
+
+bool download_file_https(){
+	//SSL_library_init();
+	//SSLeay_add_ssl_algorithms();
+	//SSL_load_error_strings();
+	
+	//SSL_METHOD *meth = TLSv1_2_client_method();
+	
+	//SSL_CTX *ctx = SSL_CTX_new(meth);
 }
 
 // return filename
@@ -247,18 +302,21 @@ void closeconn() {
 void link2host(){
 	if(URL.find("http://") == 0){
 		// HTTP
+		PROTOCOL = "HTTP";
 		PORT = 80;
 		HOST = URL.substr(7);
 		HOST = HOST.substr(0, HOST.find("/"));
 	}
 	else if(URL.find("https://") == 0){
 		// HTTPS
-		std::cerr<<"Don't support HTTPS "<<std::endl;
-		closeconn();
-		exit(1);
+		PROTOCOL = "HTTPS";
+		PORT = 443;
+		HOST = URL.substr(8);
+		HOST = HOST.substr(0, HOST.find("/"));
 	}
 	else {
 		// default is HTTP
+		PROTOCOL = "HTTP";
 		PORT = 80;
 		HOST = URL.substr(0, URL.find("/"));
 	}
@@ -285,4 +343,13 @@ void help(char *text){
 	std::cout<<std::endl<<"Usage: "<<text<<" <url>"<<std::endl<<std::endl;
 	std::cout<<"URL:    http://domain.name/path/to/file.txt"<<std::endl;
 	std::cout<<"        domain.name/path/to/file.txt"<<std::endl;
+}
+
+void printProgress (double percentage)
+{
+    int val = (int) (percentage * 100);
+    int lpad = (int) (percentage * PBWIDTH);
+    int rpad = PBWIDTH - lpad;
+    printf ("\r%3d%% [%.*s%*s]", val, lpad, PBSTR, rpad, "");
+    fflush (stdout);
 }
